@@ -46,6 +46,20 @@ impl StickiesApp {
             return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
         }
 
+        // FIXME: custom font is not applying. Followed example here:
+        // https://github.com/emilk/egui/blob/master/examples/custom_font/src/main.rs
+        let mut fonts = egui::FontDefinitions::default();
+
+        fonts.font_data.insert(
+            "EBGaramond".to_owned(),
+            egui::FontData::from_static(include_bytes!("../assets/EBGaramond-Regular.ttf"))
+        );
+
+        fonts.families.entry(egui::FontFamily::Proportional).or_default().insert(0,"EBGaramond".to_owned());
+        fonts.families.entry(egui::FontFamily::Monospace).or_default().insert(0,"EBGaramond".to_owned());
+
+        cc.egui_ctx.set_fonts(fonts);
+
         Default::default()
     }
 }
