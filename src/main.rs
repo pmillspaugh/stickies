@@ -20,7 +20,7 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "stickies",
         native_options,
-        Box::new(|cc| Box::new(stickies::StickiesApp::new(cc))),
+        Box::new(|cc| Box::new(stickies::AppState::new(cc))),
     )
 }
 
@@ -37,7 +37,7 @@ fn main() {
             .start(
                 "the_canvas_id", // hardcode it
                 web_options,
-                Box::new(|cc| Box::new(stickies::StickiesApp::new(cc))),
+                Box::new(|cc| Box::new(stickies::AppState::new(cc))),
             )
             .await
             .expect("failed to start eframe");
