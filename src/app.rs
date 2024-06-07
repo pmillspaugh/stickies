@@ -1,4 +1,4 @@
-use std::sync::mpsc;
+use std::{collections::HashMap, sync::mpsc};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -11,6 +11,7 @@ pub struct AppState {
     
     draft: String,
     todos: Vec<Todo>,
+    calculated: HashMap<String, f32>,
 }
 
 impl Default for AppState {
@@ -23,6 +24,7 @@ impl Default for AppState {
             
             draft: "Feed doge".to_owned(),
             todos: vec![Todo::new(String::from("Water plants"))],
+            calculated: HashMap::new(),
         }
     }
 }
@@ -72,6 +74,11 @@ impl AppState {
                         self.todos.remove(index);
                     }
                 }
+
+                Effect::InsertCalculated(name, value) => {
+                    self.calculated.insert(name, value);
+                    // self.calculated.clear();
+                }
             }
         }
     }
@@ -91,20 +98,33 @@ impl AppState {
             ui.add_space(10.0);
 
             ui.horizontal(|ui| {
-                ui.label("Add a sticky: ");
+                // Center the elements using the stored width from the previous frame
+                // TODO: to prevent flicker, the first frame should only calculate size and not actually render
+                let id = "draft_todo";
+                if let Some(stored_width) = self.calculated.get(id) {
+                    let offset = (ui.available_width() - stored_width) / 2.0;
+                    ui.add_space(offset);
+                }
 
+                ui.label("Add a sticky: ");
+                
                 let mut local_draft = self.draft.clone();
                 if ui.text_edit_singleline(&mut local_draft).lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                     self.effects_tx.send(Effect::AddTodo(local_draft.clone())).unwrap();
                     local_draft.clear();
                 }
-
+                
                 if ui.button("Save").clicked() {
                     self.effects_tx.send(Effect::AddTodo(local_draft.clone())).unwrap();
                     local_draft.clear();
                 }
-
+                
                 self.effects_tx.send(Effect::DraftTodo(local_draft)).unwrap();
+                
+                // Store the width for the next frame if this is the first frame
+                if let None = self.calculated.get(id) {
+                    self.effects_tx.send(Effect::InsertCalculated(id.to_string(), ui.min_rect().width())).unwrap();
+                }
             });
 
             ui.add_space(10.0);
@@ -174,6 +194,8 @@ enum Effect {
     SaveTodo(usize, String),
     CheckTodo(usize),
     DeleteTodo(usize),
+
+    InsertCalculated(String, f32),
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
