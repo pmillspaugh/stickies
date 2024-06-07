@@ -142,7 +142,7 @@ impl AppState {
                     .unwrap();
 
                 // Store the width for the next frame if this is the first frame
-                if let None = self.calculated.get(id) {
+                if self.calculated.get(id).is_none() {
                     self.effects_tx
                         .send(Effect::InsertCalculated(
                             id.to_string(),
@@ -192,17 +192,15 @@ impl AppState {
                                         .send(Effect::SaveTodo(index, local_label.clone()))
                                         .unwrap();
                                 }
-                            } else {
-                                if ui.button("Edit").clicked() {
-                                    self.effects_tx.send(Effect::EditTodo(index)).unwrap();
-                                }
+                            } else if ui.button("Edit").clicked() {
+                                self.effects_tx.send(Effect::EditTodo(index)).unwrap();
                             }
 
                             if ui.button("Delete").clicked() {
                                 self.effects_tx.send(Effect::DeleteTodo(index)).unwrap();
                             }
 
-                            if let None = self.calculated.get(id) {
+                            if self.calculated.get(id).is_none() {
                                 self.effects_tx
                                     .send(Effect::InsertCalculated(
                                         id.to_string(),
@@ -238,7 +236,7 @@ impl AppState {
                             }
                         });
 
-                        if let None = self.calculated.get(id) {
+                        if self.calculated.get(id).is_none() {
                             self.effects_tx
                                 .send(Effect::InsertCalculated(
                                     id.to_string(),
@@ -295,7 +293,7 @@ impl Todo {
     fn new(id: egui::Id, label: String) -> Self {
         Self {
             id,
-            label: label.into(),
+            label,
             checked: false,
             edit_mode: false,
         }
