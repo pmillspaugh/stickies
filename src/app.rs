@@ -23,7 +23,7 @@ impl Default for AppState {
             effects_rx,
 
             draft: "Feed doge".to_owned(),
-            todos: vec![Todo::new(String::from("Water plants"))],
+            todos: vec![],
             calculated: HashMap::new(),
         }
     }
@@ -44,14 +44,21 @@ impl AppState {
         Default::default()
     }
 
-    fn apply_effects(&mut self) {
+    fn apply_effects(&mut self, ctx: &egui::Context) {
         while let Ok(effect) = self.effects_rx.try_recv() {
             match effect {
                 Effect::DraftTodo(draft) => {
                     self.draft = draft;
                 }
                 Effect::AddTodo(label) => {
-                    self.todos.push(Todo::new(label));
+                    let id = ctx.memory_mut(|mem| {
+                        let counter: &mut usize = mem.data.get_persisted_mut_or_default(egui::Id::new("counter"));
+                        let id = egui::Id::new(*counter);
+                        *counter += 1;
+                        id
+                    });
+
+                    self.todos.push(Todo::new(id, label));
                     self.draft.clear();
                 }
                 Effect::EditTodo(index) => {
@@ -144,6 +151,7 @@ impl AppState {
 
             for (index, todo) in self.todos.iter().enumerate() {
                 let window = egui::Window::new(todo.label.clone())
+                    .id(todo.id)
                     .resizable(false)
                     .collapsible(false)
                     .title_bar(false);
@@ -272,14 +280,16 @@ enum Effect {
 
 #[derive(serde::Deserialize, serde::Serialize)]
 struct Todo {
+    id: egui::Id,
     label: String,
     checked: bool,
     edit_mode: bool,
 }
 
 impl Todo {
-    fn new(label: String) -> Self {
+    fn new(id: egui::Id, label: String) -> Self {
         Self {
+            id,
             label: label.into(),
             checked: false,
             edit_mode: false,
@@ -296,6 +306,6 @@ impl eframe::App for AppState {
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.render(ctx);
-        self.apply_effects();
+        self.apply_effects(ctx);
     }
 }
