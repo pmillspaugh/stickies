@@ -8,7 +8,7 @@ pub struct AppState {
     effects_tx: mpsc::Sender<Effect>,
     #[serde(skip_serializing, skip_deserializing)]
     effects_rx: mpsc::Receiver<Effect>,
-    
+
     draft: String,
     todos: Vec<Todo>,
     calculated: HashMap<String, f32>,
@@ -17,11 +17,11 @@ pub struct AppState {
 impl Default for AppState {
     fn default() -> Self {
         let (effects_tx, effects_rx) = mpsc::channel();
-        
+
         Self {
             effects_tx,
             effects_rx,
-            
+
             draft: "Feed doge".to_owned(),
             todos: vec![Todo::new(String::from("Water plants"))],
             calculated: HashMap::new(),
@@ -107,64 +107,136 @@ impl AppState {
                 }
 
                 ui.label("Add a sticky: ");
-                
+
                 let mut local_draft = self.draft.clone();
-                if ui.text_edit_singleline(&mut local_draft).lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                    self.effects_tx.send(Effect::AddTodo(local_draft.clone())).unwrap();
+                if ui.text_edit_singleline(&mut local_draft).lost_focus()
+                    && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                {
+                    self.effects_tx
+                        .send(Effect::AddTodo(local_draft.clone()))
+                        .unwrap();
                     local_draft.clear();
                 }
-                
+
                 if ui.button("Save").clicked() {
-                    self.effects_tx.send(Effect::AddTodo(local_draft.clone())).unwrap();
+                    self.effects_tx
+                        .send(Effect::AddTodo(local_draft.clone()))
+                        .unwrap();
                     local_draft.clear();
                 }
-                
-                self.effects_tx.send(Effect::DraftTodo(local_draft)).unwrap();
-                
+
+                self.effects_tx
+                    .send(Effect::DraftTodo(local_draft))
+                    .unwrap();
+
                 // Store the width for the next frame if this is the first frame
                 if let None = self.calculated.get(id) {
-                    self.effects_tx.send(Effect::InsertCalculated(id.to_string(), ui.min_rect().width())).unwrap();
+                    self.effects_tx
+                        .send(Effect::InsertCalculated(
+                            id.to_string(),
+                            ui.min_rect().width(),
+                        ))
+                        .unwrap();
                 }
             });
 
             ui.add_space(10.0);
-            
-            for (index, todo) in self.todos.iter().enumerate() {
-                // TODO: make this a draggable sticky instead of a row
-                ui.horizontal(|ui| {
-                    let mut local_checked = todo.checked;
-                    if ui.checkbox(&mut local_checked, "").changed() {
-                        self.effects_tx.send(Effect::CheckTodo(index)).unwrap();
-                    }
-                    let mut local_label = todo.label.clone();
-                    if todo.edit_mode {
-                        if ui.text_edit_singleline(&mut local_label).lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                            self.effects_tx.send(Effect::EditTodo(index)).unwrap();
-                            self.effects_tx.send(Effect::SaveTodo(index, local_label.clone())).unwrap();
-                        }
 
-                        self.effects_tx.send(Effect::SaveTodo(index, local_label.clone())).unwrap();
-                    } else {
-                        ui.label(&todo.label);
-                    }
+            for (index, todo) in self.todos.iter().enumerate() {
+                let window = egui::Window::new(todo.label.clone())
+                    .resizable(false)
+                    .collapsible(false)
+                    .title_bar(false);
+                
+                window.show(ui.ctx(), |ui| {
+                    // Note: I could not get `.fixed_size()`, `min_size()`, nor `.default_size()`
+                    // to work on the Window instance itself, so this is a workaround
+                    ui.set_min_size(egui::Vec2::new(150.0, 150.0));
+                    ui.set_max_size(egui::Vec2::new(150.0, 150.0));
+
+                    let mut local_label = todo.label.clone();
                     
-                    if todo.edit_mode {
-                        if ui.button("Save").clicked() {
-                            self.effects_tx.send(Effect::EditTodo(index)).unwrap();
-                            self.effects_tx.send(Effect::SaveTodo(index, local_label.clone())).unwrap();
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui| {
+                            let id = "todo_actions";
+                            let container_width = ui.available_width();
+                            
+                            let mut local_checked = todo.checked;
+                            if ui.checkbox(&mut local_checked, "").changed() {
+                                self.effects_tx.send(Effect::CheckTodo(index)).unwrap();
+                            }
+
+                            // We want to right justify the Edit and Delete buttons
+                            if let Some(stored_width) = self.calculated.get(id) {
+                                let offset = container_width - stored_width;
+                                ui.add_space(offset);
+                            }
+
+                            if todo.edit_mode {
+                                if ui.button("Save").clicked() {
+                                    self.effects_tx.send(Effect::EditTodo(index)).unwrap();
+                                    self.effects_tx
+                                        .send(Effect::SaveTodo(index, local_label.clone()))
+                                        .unwrap();
+                                }
+                            } else {
+                                if ui.button("Edit").clicked() {
+                                    self.effects_tx.send(Effect::EditTodo(index)).unwrap();
+                                }
+                            }
+    
+                            if ui.button("Delete").clicked() {
+                                self.effects_tx.send(Effect::DeleteTodo(index)).unwrap();
+                            }
+
+                            if let None = self.calculated.get(id) {
+                                self.effects_tx
+                                    .send(Effect::InsertCalculated(
+                                        id.to_string(),
+                                        ui.min_rect().width(),
+                                    ))
+                                    .unwrap();
+                            }
+                        });
+
+                        let id = "todo_text";
+                        let container_height = ui.available_height();
+                        if let Some(stored_height) = self.calculated.get(id) {
+                            let offset = (container_height - stored_height) / 2.0;
+                            ui.add_space(offset);
                         }
-                    } else {
-                        if ui.button("Edit").clicked() {
-                            self.effects_tx.send(Effect::EditTodo(index)).unwrap();
+                        
+                        ui.vertical_centered(|ui| {
+                            if todo.edit_mode {
+                                if ui.text_edit_singleline(&mut local_label).lost_focus()
+                                    && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                                {
+                                    self.effects_tx.send(Effect::EditTodo(index)).unwrap();
+                                    self.effects_tx
+                                        .send(Effect::SaveTodo(index, local_label.clone()))
+                                        .unwrap();
+                                }
+
+                                self.effects_tx
+                                    .send(Effect::SaveTodo(index, local_label.clone()))
+                                    .unwrap();
+                            } else {
+                                ui.add(egui::Label::new(&todo.label).wrap(true));
+                            }
+                        });
+
+                        if let None = self.calculated.get(id) {
+                            self.effects_tx
+                                .send(Effect::InsertCalculated(
+                                    id.to_string(),
+                                    container_height - ui.available_height(),
+                                ))
+                                .unwrap();
                         }
-                    }
-                    
-                    if ui.button("Delete").clicked() {
-                        self.effects_tx.send(Effect::DeleteTodo(index)).unwrap();
-                    }
+                    });
                 });
             }
-            
+
             ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
