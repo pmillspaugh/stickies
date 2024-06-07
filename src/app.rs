@@ -21,10 +21,10 @@ impl Default for AppState {
         Self {
             effects_tx,
             effects_rx,
+            calculated: HashMap::new(),
 
             draft: "Feed doge".to_owned(),
             todos: vec![],
-            calculated: HashMap::new(),
         }
     }
 }
@@ -52,7 +52,9 @@ impl AppState {
                 }
                 Effect::AddTodo(label) => {
                     let id = ctx.memory_mut(|mem| {
-                        let counter: &mut usize = mem.data.get_persisted_mut_or_default(egui::Id::new("counter"));
+                        let counter: &mut usize = mem
+                            .data
+                            .get_persisted_mut_or_default(egui::Id::new("counter"));
                         let id = egui::Id::new(*counter);
                         *counter += 1;
                         id
@@ -107,6 +109,7 @@ impl AppState {
             ui.horizontal(|ui| {
                 // Center the elements using the stored width from the previous frame
                 // TODO: to prevent flicker, the first frame should only calculate size and not actually render
+                // Can use Juan's helper: https://gist.github.com/juancampa/faf3525beefa477babdad237f5e81ffe
                 let id = "draft_todo";
                 if let Some(stored_width) = self.calculated.get(id) {
                     let offset = (ui.available_width() - stored_width) / 2.0;
@@ -115,6 +118,7 @@ impl AppState {
 
                 ui.label("Add a sticky: ");
 
+                // TODO: wrap immutable reference in a Cow instead of creating local copy explicitly
                 let mut local_draft = self.draft.clone();
                 if ui.text_edit_singleline(&mut local_draft).lost_focus()
                     && ui.input(|i| i.key_pressed(egui::Key::Enter))
@@ -132,6 +136,7 @@ impl AppState {
                     local_draft.clear();
                 }
 
+                // TODO: only send effect if Cow is Owned variant (because that means it made a copy upon editing the input)
                 self.effects_tx
                     .send(Effect::DraftTodo(local_draft))
                     .unwrap();
@@ -155,7 +160,7 @@ impl AppState {
                     .resizable(false)
                     .collapsible(false)
                     .title_bar(false);
-                
+
                 window.show(ui.ctx(), |ui| {
                     // Note: I could not get `.fixed_size()`, `min_size()`, nor `.default_size()`
                     // to work on the Window instance itself, so this is a workaround
@@ -163,12 +168,12 @@ impl AppState {
                     ui.set_max_size(egui::Vec2::new(150.0, 150.0));
 
                     let mut local_label = todo.label.clone();
-                    
+
                     ui.vertical(|ui| {
                         ui.horizontal(|ui| {
                             let id = "todo_actions";
                             let container_width = ui.available_width();
-                            
+
                             let mut local_checked = todo.checked;
                             if ui.checkbox(&mut local_checked, "").changed() {
                                 self.effects_tx.send(Effect::CheckTodo(index)).unwrap();
@@ -192,7 +197,7 @@ impl AppState {
                                     self.effects_tx.send(Effect::EditTodo(index)).unwrap();
                                 }
                             }
-    
+
                             if ui.button("Delete").clicked() {
                                 self.effects_tx.send(Effect::DeleteTodo(index)).unwrap();
                             }
@@ -213,7 +218,7 @@ impl AppState {
                             let offset = (container_height - stored_height) / 2.0;
                             ui.add_space(offset);
                         }
-                        
+
                         ui.vertical_centered(|ui| {
                             if todo.edit_mode {
                                 if ui.text_edit_singleline(&mut local_label).lost_focus()
